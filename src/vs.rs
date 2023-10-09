@@ -7,10 +7,12 @@ use std::fmt;
 pub enum Varsig {
     /// Unknown signature
     Unknown {
+        /// version of the varsig header
+        version: Codec,
         /// key codec value that is Unknown
         key: Codec,
         /// encoding codec for the data that was signed
-        encoding: Codec,
+        encoding: Option<Codec>,
         /// signature-specific header values
         signature_specific: Vec<Codec>,
         /// the signature-specific data
@@ -19,6 +21,8 @@ pub enum Varsig {
 
     /// EdDSA signature, key codec 0xED
     EdDSA {
+        /// version of the varsig header
+        version: Codec,
         /// the encoding info
         encoding: Codec,
         /// the signature data
@@ -29,64 +33,76 @@ pub enum Varsig {
 impl Varsig {
     /// encodes the Varsig to a buffer
     pub fn to_vec(&self) -> Vec<u8> {
-        let mut v: Vec<u8> = Codec::Varsig.into();
         match self {
             Varsig::Unknown {
+                version,
                 key,
                 encoding,
                 signature_specific,
                 signature,
             } => {
-                let k: Vec<u8> = key.clone().into();
-                v.extend_from_slice(&k);
-                let e: Vec<u8> = encoding.clone().into();
-                v.extend_from_slice(&e);
-                for ss in signature_specific {
-                    let s: Vec<u8> = ss.clone().into();
-                    v.extend_from_slice(&s);
+                let mut v = version.to_vec();
+                v.extend_from_slice(&key.to_vec());
+                match version {
+                    Codec::Varsigv1 => {
+                        for ss in signature_specific {
+                            v.extend_from_slice(&ss.to_vec());
+                        }
+                        if let Some(encoding) = encoding {
+                            v.extend_from_slice(&encoding.to_vec());
+                        }
+                    }
+                    Codec::Varsigv2 => {
+                        if let Some(encoding) = encoding {
+                            v.extend_from_slice(&encoding.to_vec());
+                        }
+                        for ss in signature_specific {
+                            v.extend_from_slice(&ss.to_vec());
+                        }
+                    }
+                    _ => {}
                 }
                 v.extend_from_slice(&signature);
+                v
             }
             Varsig::EdDSA {
+                version,
                 encoding,
                 signature,
             } => {
+                let mut v: Vec<u8> = version.clone().into();
                 let c: Vec<u8> = Codec::Ed25519Pub.into();
                 v.extend_from_slice(&c);
+                // there are no signature-specific values
                 let e: Vec<u8> = encoding.clone().into();
                 v.extend_from_slice(&e);
                 v.extend_from_slice(&signature);
+                v
             }
         }
-        v
+    }
+
+    /// get the version for the Varsig
+    pub fn version(&self) -> Codec {
+        match self {
+            Varsig::Unknown { version, .. } => version.clone(),
+            Varsig::EdDSA { .. } => Codec::Ed25519Pub,
+        }
     }
 
     /// get the codec for the Varsig
     pub fn key(&self) -> Codec {
         match self {
-            Varsig::Unknown {
-                key,
-                encoding: _,
-                signature_specific: _,
-                signature: _,
-            } => key.clone(),
+            Varsig::Unknown { key, .. } => key.clone(),
             Varsig::EdDSA { .. } => Codec::Ed25519Pub,
         }
     }
 
     /// get the encoding for the Varsig
-    pub fn encoding(&self) -> Codec {
+    pub fn encoding(&self) -> Option<Codec> {
         let encoding = match self {
-            Varsig::Unknown {
-                key: _,
-                encoding,
-                signature_specific: _,
-                signature: _,
-            } => encoding,
-            Varsig::EdDSA {
-                encoding,
-                signature: _,
-            } => encoding,
+            Varsig::Unknown { encoding, .. } => *encoding,
+            Varsig::EdDSA { encoding, .. } => Some(*encoding),
         };
         encoding.clone()
     }
@@ -94,31 +110,26 @@ impl Varsig {
     /// get the signature payload
     pub fn signature(&self) -> Vec<u8> {
         let signature = match self {
-            Varsig::Unknown {
-                key: _,
-                encoding: _,
-                signature_specific: _,
-                signature,
-            } => signature,
-            Varsig::EdDSA {
-                encoding: _,
-                signature,
-            } => signature,
+            Varsig::Unknown { signature, .. } => signature,
+            Varsig::EdDSA { signature, .. } => signature,
         };
         signature.clone()
     }
 }
 
+/*
 impl Default for Varsig {
     fn default() -> Self {
         Varsig::Unknown {
+            version: Codec::Varsigv2,
             key: Codec::default(),
-            encoding: Codec::default(),
+            encoding: None,
             signature_specific: Vec::default(),
             signature: Vec::default(),
         }
     }
 }
+*/
 
 impl TryFrom<String> for Varsig {
     type Error = Error;
@@ -152,68 +163,96 @@ impl TryFrom<&[u8]> for Varsig {
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         // ensure the first byte is the magic byte
-        let vs = MultiCodec::try_from(data)?;
-        if vs.codec() != Codec::Varsig {
+        let version = MultiCodec::try_from(data)?;
+        if version.codec() != Codec::Varsigv1 && version.codec() != Codec::Varsigv2 {
             return Err(Error::MissingSigil);
         }
 
         // decoded the unsigned varint multicodec value
-        let key = MultiCodec::try_from(vs.data())?;
-
-        // parse the encoding codec for the data that was signed
-        let encoding = MultiCodec::try_from(key.data())?;
+        let key = MultiCodec::try_from(version.data())?;
 
         Ok(match key.codec() {
-            Codec::Ed25519Pub => Self::EdDSA {
-                encoding: encoding.codec(),
-                signature: encoding.data().to_vec(),
-            },
-            _ => Self::Unknown {
-                key: key.codec(),
-                encoding: encoding.codec(),
-                signature_specific: Vec::default(),
-                signature: encoding.data().to_vec(),
-            },
+            Codec::Ed25519Pub => {
+                // parse the encoding codec for the data that was signed
+                let encoding = MultiCodec::try_from(key.data())?;
+
+                Self::EdDSA {
+                    version: version.codec(),
+                    encoding: encoding.codec(),
+                    signature: encoding.data().to_vec(),
+                }
+            }
+            _ => {
+                let (encoding, data) = match version.codec() {
+                    Codec::Varsigv1 => (None, key.data()),
+                    Codec::Varsigv2 => {
+                        // parse the encoding codec for the data that was signed
+                        let e = MultiCodec::try_from(key.data())?;
+                        (Some(e.codec()), e.data())
+                    }
+                    _ => return Err(Error::MissingSigil),
+                };
+
+                Self::Unknown {
+                    version: version.codec(),
+                    key: key.codec(),
+                    encoding,
+                    signature_specific: Vec::default(),
+                    signature: data.to_vec(),
+                }
+            }
         })
     }
 }
 
 impl fmt::Display for Varsig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Varsig:")?;
         match self {
             Varsig::Unknown {
+                version,
                 key,
                 encoding,
                 signature_specific,
                 signature,
             } => {
+                writeln!(f, "{}:", version)?;
                 writeln!(f, "\tKey Type: {}", key)?;
-                writeln!(f, "\tEncoding: {}", encoding)?;
+                match encoding {
+                    Some(e) => {
+                        writeln!(f, "\tEncoding: {}", e)?;
+                    }
+                    None => {
+                        writeln!(f, "\tEncoding: Unknown")?;
+                    }
+                }
                 write!(f, "\tSignature Specific: [ ")?;
                 for ss in signature_specific {
                     write!(f, "{}, ", ss)?;
                 }
                 writeln!(f, "]")?;
-                writeln!(
-                    f,
-                    "\tSig: ({}) {}",
-                    signature.len(),
-                    hex::encode(&signature)
-                )?;
+                let mut sig = hex::encode(&signature);
+                if sig.len() > 16 {
+                    let bs = sig.as_str()[..8].to_string();
+                    let es = sig.as_str()[sig.len() - 8..].to_string();
+                    sig = format!("{}...{}", bs, es);
+                }
+                writeln!(f, "\tSig: ({}) {}", signature.len(), sig)?;
             }
             Varsig::EdDSA {
+                version,
                 encoding,
                 signature,
             } => {
+                writeln!(f, "{}:", version)?;
                 writeln!(f, "\tKey Type: {}", self.key())?;
                 writeln!(f, "\tEncoding: {}", encoding)?;
-                writeln!(
-                    f,
-                    "\tSig: ({}) {}",
-                    signature.len(),
-                    hex::encode(&signature)
-                )?;
+                let mut sig = hex::encode(&signature);
+                if sig.len() > 16 {
+                    let bs = sig.as_str()[..8].to_string();
+                    let es = sig.as_str()[sig.len() - 8..].to_string();
+                    sig = format!("{}...{}", bs, es);
+                }
+                writeln!(f, "\tSig: ({}) {}", signature.len(), sig)?;
             }
         }
         Ok(())
@@ -223,6 +262,7 @@ impl fmt::Display for Varsig {
 /// Builder for Varsigs
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
+    version: Codec,
     key: Codec,
     encoding: Codec,
     signature_specific: Vec<Codec>,
@@ -230,6 +270,22 @@ pub struct Builder {
 }
 
 impl Builder {
+    /// create a new v1 varsig
+    pub fn newv1() -> Self {
+        Self {
+            version: Codec::Varsigv1,
+            ..Default::default()
+        }
+    }
+
+    /// create a new v1 varsig
+    pub fn newv2() -> Self {
+        Self {
+            version: Codec::Varsigv2,
+            ..Default::default()
+        }
+    }
+
     /// set the key codec
     pub fn key(mut self, codec: Codec) -> Self {
         self.key = codec;
@@ -258,12 +314,14 @@ impl Builder {
     pub fn build(&self) -> Varsig {
         match self.key {
             Codec::Ed25519Pub => Varsig::EdDSA {
+                version: self.version,
                 encoding: self.encoding,
                 signature: self.signature.clone(),
             },
             _ => Varsig::Unknown {
+                version: self.version,
                 key: self.key,
-                encoding: self.encoding,
+                encoding: Some(self.encoding),
                 signature_specific: self.signature_specific.clone(),
                 signature: self.signature.clone(),
             },
@@ -277,13 +335,14 @@ mod tests {
 
     #[test]
     fn test_default() {
-        let v = Varsig::default().to_vec();
+        let vs = Builder::newv1().build();
+        let v = vs.to_vec();
         assert_eq!(3, v.len());
     }
 
     #[test]
     fn test_unknown() {
-        let vs = Builder::default()
+        let vs = Builder::newv1()
             .key(Codec::Unknown(0xDEAD))
             .encoding(Codec::Raw)
             .signature(Vec::default().as_slice())
@@ -294,7 +353,7 @@ mod tests {
 
     #[test]
     fn test_eddsa() {
-        let vs = Builder::default()
+        let vs = Builder::newv2()
             .key(Codec::Ed25519Pub)
             .encoding(Codec::Raw)
             .signature(Vec::default().as_slice())
@@ -307,7 +366,7 @@ mod tests {
     fn test_eip191_unknown() {
         // this builds a Varsig::Unknown since we don't know about EIP-191
         // encoded data that is hashed with Keccak256 and signed with secp256k1
-        let vs = Builder::default()
+        let vs = Builder::newv1()
             .key(Codec::Secp256K1Pub)
             .encoding(Codec::Eip191)
             .signature_specific(&[Codec::Keccak256])
