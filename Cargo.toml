@@ -1,6 +1,6 @@
 [package]
 name = "varsig"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Dave Huseby <dwh@linuxprogrammer.org>"]
 description = "Varsig self-describing signature implementation"
