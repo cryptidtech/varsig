@@ -23,4 +23,8 @@ pub enum Error {
     /// Missing sigil 0x34
     #[error("Missing Varsig codec sigil")]
     MissingSigil,
+
+    /// Unsupported signature algorithm
+    #[error("Unsupported signature algorithm: {0}")]
+    UnsupportedAlgorithm(String),
 }

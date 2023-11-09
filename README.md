@@ -12,16 +12,16 @@ to distinguish the two formats.
 
 ## Varsig v1 Format 
 
-```abnf
-;    key codec           encoding codec
-;        |                      |
-;        v                      v
-%x34 <varuint> N(<varuint>) <varuint> N(OCTET)
-; ^                  ^                    ^
-; |                  |                    |
-; v1        variable number of     variable number
-;           signature specific    of signature data
-;                  values              octets
+```
+     key codec           encoding codec
+         |                      |
+         v                      v
+0x34 <varuint> N(<varuint>) <varuint> N(OCTET)
+^                    ^                    ^
+|                    |                    |
+varsig      variable number of     variable number
+v1 sigil    signature specific    of signature data
+                   values              octets
 ```
 
 The v1 format unfortunately has a variable number of signature-specific values 
@@ -32,18 +32,18 @@ unparsable data.
 
 ## Varsig v2 Format 
 
-```abnf
-;                      variable number of
-;                      signature specific
-;    key codec               values
-;        |                     |
-;        v                     v
-%x39 <varuint> <varuint> N(<varuint>) N(OCTET)
-; ^                ^                      ^
-; |                |                      |
-; v2        encoding codec         variable number
-;                                 of signature data
-;                                       octets
+```
+                       variable number of
+                       signature specific
+     key codec               values
+         |                     |
+         v                     v
+0x39 <varuint> <varuint> N(<varuint>) N(OCTET)
+^                  ^                      ^
+|                  |                      |
+varsig        encoding codec       variable number
+v2 sigil                          of signature data
+                                        octets
 ```
 
 The v2 format allows tools that don't recognize the key codec to at least parse
