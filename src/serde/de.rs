@@ -41,7 +41,7 @@ impl<'de> Deserialize<'de> for Varsig {
             {
                 let mut sigil = None;
                 let mut codec = None;
-                let mut payload_encoding = None;
+                let mut msg_encoding = None;
                 let mut attributes = None;
                 let mut signature = None;
                 while let Some(key) = map.next_key()? {
@@ -68,11 +68,11 @@ impl<'de> Deserialize<'de> for Varsig {
                             );
                         }
                         Field::Encoding => {
-                            if payload_encoding.is_some() {
+                            if msg_encoding.is_some() {
                                 return Err(Error::duplicate_field("encoding"));
                             }
                             let e: u64 = map.next_value()?;
-                            payload_encoding =
+                            msg_encoding =
                                 Some(Codec::try_from(e).map_err(|_| {
                                     Error::custom("invalid varsig payload encoding")
                                 })?);
@@ -95,8 +95,7 @@ impl<'de> Deserialize<'de> for Varsig {
                 }
                 let sigil = sigil.ok_or_else(|| Error::missing_field("version"))?;
                 let codec = codec.ok_or_else(|| Error::missing_field("codec"))?;
-                let payload_encoding =
-                    payload_encoding.ok_or_else(|| Error::missing_field("encoding"))?;
+                let msg_encoding = msg_encoding.ok_or_else(|| Error::missing_field("encoding"))?;
                 let attributes: Vec<u64> = attributes
                     .ok_or_else(|| Error::missing_field("attributes"))?
                     .iter()
@@ -109,13 +108,13 @@ impl<'de> Deserialize<'de> for Varsig {
                 match codec {
                     Codec::Ed25519Pub => Ok(Varsig::EdDSA {
                         sigil,
-                        payload_encoding,
+                        msg_encoding,
                         signature,
                     }),
                     _ => Ok(Varsig::Unknown {
                         sigil,
                         codec,
-                        payload_encoding: Some(payload_encoding),
+                        msg_encoding: Some(msg_encoding),
                         attributes,
                         signature,
                     }),
@@ -126,7 +125,7 @@ impl<'de> Deserialize<'de> for Varsig {
         if deserializer.is_human_readable() {
             deserializer.deserialize_struct("Varsig", FIELDS, VarsigVisitor)
         } else {
-            let (sigil, codec, payload_encoding, attributes, signature): (
+            let (sigil, codec, msg_encoding, attributes, signature): (
                 Codec,
                 Codec,
                 Codec,
@@ -143,13 +142,13 @@ impl<'de> Deserialize<'de> for Varsig {
             match codec {
                 Codec::Ed25519Pub => Ok(Varsig::EdDSA {
                     sigil,
-                    payload_encoding,
+                    msg_encoding,
                     signature,
                 }),
                 _ => Ok(Varsig::Unknown {
                     sigil,
                     codec,
-                    payload_encoding: Some(payload_encoding),
+                    msg_encoding: Some(msg_encoding),
                     attributes,
                     signature,
                 }),

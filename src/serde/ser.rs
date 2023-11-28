@@ -23,14 +23,14 @@ impl ser::Serialize for Varsig {
             let mut ss = serializer.serialize_struct("Varsig", 5)?;
             ss.serialize_field("version", &version)?;
             ss.serialize_field("codec", &self.codec().code())?;
-            ss.serialize_field("encoding", &self.payload_encoding().code())?;
+            ss.serialize_field("encoding", &self.msg_encoding().code())?;
             ss.serialize_field("attributes", &cv)?;
             ss.serialize_field("signature", &Varbytes::encoded_new(self.signature()))?;
             ss.end()
         } else {
             let cv: Vec<Varuint<u64>> = self.attributes().iter().map(|v| Varuint(*v)).collect();
             let sig = Varbytes(self.signature());
-            (self.sigil(), self.codec(), self.payload_encoding(), cv, sig).serialize(serializer)
+            (self.sigil(), self.codec(), self.msg_encoding(), cv, sig).serialize(serializer)
         }
     }
 }

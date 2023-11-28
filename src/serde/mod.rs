@@ -103,7 +103,7 @@ mod tests {
         // this builds a Varsig::Unknown since we don't know about EIP-191
         // encoded data that is hashed with Keccak256 and signed with secp256k1
         let vs1 = Builder::newv1(Codec::Secp256K1Pub)
-            .with_payload_encoding(Codec::Eip191)
+            .with_msg_encoding(Codec::Eip191)
             .with_attributes(&[Codec::Keccak256.code()].to_vec())
             .with_signature_bytes([0u8; 64].as_slice())
             .build();
