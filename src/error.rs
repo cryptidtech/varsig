@@ -5,20 +5,20 @@ use thiserror::Error;
 #[non_exhaustive]
 pub enum Error {
     /// Formatting error
-    #[error("fmt error {0}")]
+    #[error(transparent)]
     Fmt(#[from] std::fmt::Error),
 
-    /// A generic error message
-    #[error("General varsig error: {0}")]
-    General(&'static str),
-
     /// A multibase conversion error
-    #[error("Multibase conversion failed: {0}")]
+    #[error(transparent)]
     Multibase(#[from] multibase::Error),
 
     /// A multicodec decoding error
-    #[error("Multicodec decoding failed: {0}")]
-    Multicodec(#[from] multicodec::error::Error),
+    #[error(transparent)]
+    Multicodec(#[from] multicodec::Error),
+
+    /// A multiutil error
+    #[error(transparent)]
+    Multiutil(#[from] multiutil::Error),
 
     /// Missing sigil 0x34
     #[error("Missing Varsig codec sigil")]

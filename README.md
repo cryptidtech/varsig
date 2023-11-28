@@ -13,7 +13,8 @@ to distinguish the two formats.
 ## Varsig v1 Format 
 
 ```
-     key codec           encoding codec
+                         payload encoding
+     key codec                codec
          |                      |
          v                      v
 0x34 <varuint> N(<varuint>) <varuint> N(OCTET)
@@ -33,17 +34,16 @@ unparsable data.
 ## Varsig v2 Format 
 
 ```
-                       variable number of
-                       signature specific
-     key codec               values
-         |                     |
-         v                     v
-0x39 <varuint> <varuint> N(<varuint>) N(OCTET)
-^                  ^                      ^
-|                  |                      |
-varsig        encoding codec       variable number
-v2 sigil                          of signature data
-                                        octets
+                                variable number of
+                    count of    signature specific   count of
+     key codec    attributes        attributes       signature octets
+         |                  \            |          /
+         v                   v           v         v
+0x39 <varuint> <varuint> <varuint> N(<varuint>) <varuint> N(OCTET)
+^                  ^                              ^
+|                  |                              |
+varsig      payload encoding               variable number
+v2 sigil         codec                   of signature octets
 ```
 
 The v2 format allows tools that don't recognize the key codec to at least parse

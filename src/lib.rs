@@ -7,20 +7,23 @@
     unused_qualifications
 )]
 
-/// The result type for this crate
-pub type Result<T> = anyhow::Result<T>;
-
 /// Errors produced by this library
 pub mod error;
+pub use error::Error;
+
+/// Serde serialization
+#[cfg(feature = "serde")]
+pub mod serde;
 
 /// Varsig type and functions
 pub mod vs;
+pub use vs::{Builder, EncodedVarsig, Varsig};
 
 /// ...and in the darkness bind them
 pub mod prelude {
-    use super::*;
-
-    pub use super::Result;
-    pub use error::*;
-    pub use vs::*;
+    pub use super::*;
+    /// re-exports
+    pub use multibase::Base;
+    pub use multicodec::Codec;
+    pub use multiutil::BaseEncoded;
 }
