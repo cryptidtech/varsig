@@ -19,12 +19,12 @@ mod tests {
             &vs.compact(),
             &[
                 Token::Tuple { len: 5 },
-                Token::Bytes(&[57]),
-                Token::Bytes(&[237, 1]),
-                Token::Bytes(&[85]),
+                Token::BorrowedBytes(&[57]),
+                Token::BorrowedBytes(&[237, 1]),
+                Token::BorrowedBytes(&[0]),
                 Token::Seq { len: Some(0) },
                 Token::SeqEnd,
-                Token::Bytes(&[
+                Token::BorrowedBytes(&[
                     64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -43,9 +43,8 @@ mod tests {
 
         assert_tokens(
             &vs.readable(),
-            &[Token::String(
-                "z3Ye1MnetXU2Z4QE8TjCcDbcy1BCPtmXKiypWKntvwnaGQSroXS3YSfEtKA8DVRai15zbjaa4FpQ5eQLxS5W7DJLUGtFbscKH",
-            )],
+            &[Token::BorrowedStr("z3Ye1KGXPfHDM1YLPDDzHsZbDpjFS9qCRzDLh3nLRYgmVESqRsoxX7mEq7ZgoqmC6VZhheT4wMFUYgSyeC5gV5GvJYx8s2hZy")
+            ],
         )
     }
 
@@ -62,17 +61,17 @@ mod tests {
                     name: "Varsig",
                     len: 5,
                 },
-                Token::Str("version"),
+                Token::BorrowedStr("version"),
                 Token::U8(2_u8),
-                Token::Str("codec"),
+                Token::BorrowedStr("codec"),
                 Token::U64(237_u64),
-                Token::Str("encoding"),
-                Token::U64(85_u64),
-                Token::Str("attributes"),
+                Token::BorrowedStr("encoding"),
+                Token::U64(0_u64),
+                Token::BorrowedStr("attributes"),
                 Token::Seq { len: Some(0) },
                 Token::SeqEnd,
-                Token::Str("signature"),
-                Token::Str("f4000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+                Token::BorrowedStr("signature"),
+                Token::BorrowedStr("f4000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
                 Token::StructEnd,
             ],
         )

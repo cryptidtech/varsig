@@ -381,9 +381,9 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown() {
-        let vs1 = Builder::newv2(Codec::Unknown(0xDEAD))
-            .with_msg_encoding(Codec::Raw)
+    fn test_default() {
+        let vs1 = Builder::newv2(Codec::default())
+            .with_msg_encoding(Codec::default())
             .with_signature_bytes(Vec::default().as_slice())
             .build_encoded();
         let s = vs1.to_string();

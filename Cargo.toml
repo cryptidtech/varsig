@@ -1,6 +1,6 @@
 [package]
 name = "varsig"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 authors = ["Dave Huseby <dwh@linuxprogrammer.org>"]
 description = "Varsig self-describing signature implementation"
@@ -13,7 +13,7 @@ default = ["serde"]
 
 [dependencies]
 multibase = "0.9"
-multicodec = { version = "0.2", git = "https://github.com/cryptidtech/rust-multicodec.git" }
+multicodec = { version = "0.3", git = "https://github.com/cryptidtech/rust-multicodec.git" }
 multitrait = { version = "0.1", git = "https://github.com/cryptidtech/multitrait.git" }
 multiutil = { version = "0.1", git = "https://github.com/cryptidtech/multiutil.git" }
 serde = { version = "1.0", default-featurs = false, features = ["alloc", "derive"], optional = true }
