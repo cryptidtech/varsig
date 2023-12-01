@@ -1,4 +1,4 @@
-use crate::vs::{Varsig, SIGILV1, SIGILV2};
+use crate::{vs::SIGIL, Varsig};
 use core::fmt;
 use multicodec::Codec;
 use multiutil::{EncodedVarbytes, EncodedVaruint, Varbytes, Varuint};
@@ -39,7 +39,7 @@ impl<'de> Deserialize<'de> for Varsig {
             where
                 V: MapAccess<'de>,
             {
-                let mut sigil = None;
+                let mut version = None;
                 let mut codec = None;
                 let mut msg_encoding = None;
                 let mut attributes = None;
@@ -47,15 +47,11 @@ impl<'de> Deserialize<'de> for Varsig {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Version => {
-                            if sigil.is_some() {
+                            if version.is_some() {
                                 return Err(Error::duplicate_field("version"));
                             }
                             let v: u8 = map.next_value()?;
-                            sigil = Some(match v {
-                                1 => SIGILV1,
-                                2 => SIGILV2,
-                                _ => return Err(Error::custom("invlid Varsig version")),
-                            });
+                            version = Some(v);
                         }
                         Field::Codec => {
                             if codec.is_some() {
@@ -93,7 +89,7 @@ impl<'de> Deserialize<'de> for Varsig {
                         }
                     }
                 }
-                let sigil = sigil.ok_or_else(|| Error::missing_field("version"))?;
+                let version = version.ok_or_else(|| Error::missing_field("version"))?;
                 let codec = codec.ok_or_else(|| Error::missing_field("codec"))?;
                 let msg_encoding = msg_encoding.ok_or_else(|| Error::missing_field("encoding"))?;
                 let attributes: Vec<u64> = attributes
@@ -107,12 +103,12 @@ impl<'de> Deserialize<'de> for Varsig {
                     .to_inner();
                 match codec {
                     Codec::Ed25519Pub => Ok(Varsig::EdDSA {
-                        sigil,
+                        version,
                         msg_encoding,
                         signature,
                     }),
                     _ => Ok(Varsig::Unknown {
-                        sigil,
+                        version,
                         codec,
                         msg_encoding: Some(msg_encoding),
                         attributes,
@@ -125,28 +121,28 @@ impl<'de> Deserialize<'de> for Varsig {
         if deserializer.is_human_readable() {
             deserializer.deserialize_struct("Varsig", FIELDS, VarsigVisitor)
         } else {
-            let (sigil, codec, msg_encoding, attributes, signature): (
+            let (sigil, version, codec, msg_encoding, attributes, signature): (
                 Codec,
+                Varuint<u8>,
                 Codec,
                 Codec,
                 Vec<Varuint<u64>>,
                 Varbytes,
             ) = Deserialize::deserialize(deserializer)?;
-
-            if sigil != SIGILV1 && sigil != SIGILV2 {
+            if sigil != SIGIL {
                 return Err(Error::custom("deserialized sigil is not a Varsig sigil"));
             }
-
+            let version = version.to_inner();
             let attributes = attributes.iter().map(|v| v.clone().to_inner()).collect();
             let signature = signature.to_inner();
             match codec {
                 Codec::Ed25519Pub => Ok(Varsig::EdDSA {
-                    sigil,
+                    version,
                     msg_encoding,
                     signature,
                 }),
                 _ => Ok(Varsig::Unknown {
-                    sigil,
+                    version,
                     codec,
                     msg_encoding: Some(msg_encoding),
                     attributes,

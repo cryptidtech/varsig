@@ -1,5 +1,4 @@
-use crate::vs::Varsig;
-use multicodec::Codec;
+use crate::{vs::SIGIL, Varsig};
 use multiutil::{CodecInfo, EncodedVaruint, Varbytes, Varuint};
 use serde::ser::{self, SerializeStruct};
 
@@ -15,13 +14,8 @@ impl ser::Serialize for Varsig {
                 .iter()
                 .map(|v| Varuint::<u64>::encoded_new(*v))
                 .collect();
-            let version = match self.sigil() {
-                Codec::Varsigv1 => 1u8,
-                Codec::Varsigv2 => 2u8,
-                _ => return Err(ser::Error::custom("invalid sigil")),
-            };
             let mut ss = serializer.serialize_struct("Varsig", 5)?;
-            ss.serialize_field("version", &version)?;
+            ss.serialize_field("version", &self.version())?;
             ss.serialize_field("codec", &self.codec().code())?;
             ss.serialize_field("encoding", &self.msg_encoding().code())?;
             ss.serialize_field("attributes", &cv)?;
@@ -30,7 +24,15 @@ impl ser::Serialize for Varsig {
         } else {
             let cv: Vec<Varuint<u64>> = self.attributes().iter().map(|v| Varuint(*v)).collect();
             let sig = Varbytes(self.signature());
-            (self.sigil(), self.codec(), self.msg_encoding(), cv, sig).serialize(serializer)
+            (
+                SIGIL,
+                Varuint(self.version()),
+                self.codec(),
+                self.msg_encoding(),
+                cv,
+                sig,
+            )
+                .serialize(serializer)
         }
     }
 }

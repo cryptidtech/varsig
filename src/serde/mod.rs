@@ -18,8 +18,9 @@ mod tests {
         assert_tokens(
             &vs.compact(),
             &[
-                Token::Tuple { len: 5 },
-                Token::BorrowedBytes(&[57]),
+                Token::Tuple { len: 6 },
+                Token::BorrowedBytes(&[0x34]),
+                Token::BorrowedBytes(&[0x02]),
                 Token::BorrowedBytes(&[237, 1]),
                 Token::BorrowedBytes(&[0]),
                 Token::Seq { len: Some(0) },
@@ -43,7 +44,7 @@ mod tests {
 
         assert_tokens(
             &vs.readable(),
-            &[Token::BorrowedStr("z3Ye1KGXPfHDM1YLPDDzHsZbDpjFS9qCRzDLh3nLRYgmVESqRsoxX7mEq7ZgoqmC6VZhheT4wMFUYgSyeC5gV5GvJYx8s2hZy")
+            &[Token::BorrowedStr("z8TWhueaumkaxd2Y4Yq66qx6zg3LrpnUWuLTR5XDf1URY3hQea39FmZsrbKqUXVCq6Z1rvh23YDHhMmGCGPpPEANjw3NczLf")
             ],
         )
     }

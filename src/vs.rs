@@ -6,11 +6,8 @@ use multiutil::{BaseEncoded, CodecInfo, EncodingInfo, Varbytes, Varuint};
 use ssh_key::{Algorithm, Signature};
 use std::fmt;
 
-/// the varsig v1 sigil
-pub const SIGILV1: Codec = Codec::Varsigv1;
-
-/// the varsig v2 sigil
-pub const SIGILV2: Codec = Codec::Varsigv2;
+/// the varsig sigil
+pub const SIGIL: Codec = Codec::Varsig;
 
 /// a base encoded varsig
 pub type EncodedVarsig = BaseEncoded<Varsig>;
@@ -21,7 +18,7 @@ pub enum Varsig {
     /// Unknown signature
     Unknown {
         /// version of the varsig header
-        sigil: Codec,
+        version: u8,
         /// key codec value that is Unknown
         codec: Codec,
         /// msg encoding codec
@@ -35,7 +32,7 @@ pub enum Varsig {
     /// EdDSA signature, key codec 0xED
     EdDSA {
         /// version of the varsig header
-        sigil: Codec,
+        version: u8,
         /// the payload encoding
         msg_encoding: Codec,
         /// the signature data
@@ -44,11 +41,11 @@ pub enum Varsig {
 }
 
 impl Varsig {
-    /// get the sigil for the Varsig
-    pub fn sigil(&self) -> Codec {
+    /// get the version
+    pub fn version(&self) -> u8 {
         match self {
-            Varsig::Unknown { sigil, .. } => *sigil,
-            Varsig::EdDSA { sigil, .. } => *sigil,
+            Varsig::Unknown { version, .. } => *version,
+            Varsig::EdDSA { version, .. } => *version,
         }
     }
 
@@ -80,7 +77,7 @@ impl Varsig {
 impl CodecInfo for Varsig {
     /// Return that we are a Varsig object
     fn preferred_codec() -> Codec {
-        SIGILV2
+        SIGIL
     }
 
     /// Return the signing codec for the varsig
@@ -105,14 +102,13 @@ impl EncodingInfo for Varsig {
 impl Into<Vec<u8>> for Varsig {
     fn into(self) -> Vec<u8> {
         let mut v = Vec::default();
-        // start with the sigil
-        v.append(&mut self.sigil().into());
+        // add in the version
+        v.append(&mut Varuint(self.version()).into());
         // add in the signing codec
         v.append(&mut self.codec().into());
-
         let attributes = self.attributes();
         let mut signature = self.signature();
-        if self.sigil() == Codec::Varsigv2 {
+        if self.version() == 2 {
             // add in the payload encoding
             v.append(&mut self.msg_encoding().into());
             // add in the number signature specific attributes
@@ -150,27 +146,25 @@ impl<'a> TryDecodeFrom<'a> for Varsig {
     type Error = Error;
 
     fn try_decode_from(bytes: &'a [u8]) -> Result<(Self, &'a [u8]), Self::Error> {
-        // decode the sigil
-        let (sigil, ptr) = Codec::try_decode_from(bytes)?;
-        if sigil != SIGILV1 && sigil != SIGILV2 {
-            return Err(Error::MissingSigil);
-        }
+        // decode the version
+        let (version, ptr) = Varuint::<u8>::try_decode_from(bytes)?;
+        let version = version.to_inner();
         // decoded the signing coded
         let (codec, ptr) = Codec::try_decode_from(ptr)?;
         // get the payload encoding if v2
-        let (msg_encoding, ptr) = match sigil {
-            Codec::Varsigv1 => (None, ptr),
-            Codec::Varsigv2 => {
+        let (msg_encoding, ptr) = match version {
+            1 => (None, ptr),
+            2 => {
                 // parse the encoding codec for the data that was signed
                 let (msg_encoding, ptr) = Codec::try_decode_from(ptr)?;
                 (Some(msg_encoding), ptr)
             }
-            _ => return Err(Error::MissingSigil),
+            _ => return Err(Error::InvalidVersion(version)),
         };
         // get the attributes if v2
-        let (attributes, ptr) = match sigil {
-            Codec::Varsigv1 => (Vec::default(), ptr),
-            Codec::Varsigv2 => {
+        let (attributes, ptr) = match version {
+            1 => (Vec::default(), ptr),
+            2 => {
                 // parse the number of attributes
                 let (len, ptr) = Varuint::<usize>::try_decode_from(ptr)?;
                 let len = len.to_inner();
@@ -185,10 +179,10 @@ impl<'a> TryDecodeFrom<'a> for Varsig {
                 }
                 (v, p)
             }
-            _ => return Err(Error::MissingSigil),
+            _ => return Err(Error::InvalidVersion(version)),
         };
-        let (signature, ptr) = match sigil {
-            Codec::Varsigv1 => match codec {
+        let (signature, ptr) = match version {
+            1 => match codec {
                 Codec::Ed25519Pub => {
                     let s = ptr[..64].to_vec();
                     let p = &ptr[64..];
@@ -200,12 +194,12 @@ impl<'a> TryDecodeFrom<'a> for Varsig {
                     (s, p)
                 }
             },
-            Codec::Varsigv2 => {
+            2 => {
                 // parse the signature byts array
                 let (s, p) = Varbytes::try_decode_from(ptr)?;
                 (s.to_inner(), p)
             }
-            _ => return Err(Error::MissingSigil),
+            _ => return Err(Error::InvalidVersion(version)),
         };
 
         match codec {
@@ -213,7 +207,7 @@ impl<'a> TryDecodeFrom<'a> for Varsig {
                 let msg_encoding = msg_encoding.unwrap_or(Codec::Raw);
                 Ok((
                     Self::EdDSA {
-                        sigil,
+                        version,
                         msg_encoding,
                         signature,
                     },
@@ -222,7 +216,7 @@ impl<'a> TryDecodeFrom<'a> for Varsig {
             }
             _ => Ok((
                 Self::Unknown {
-                    sigil,
+                    version,
                     codec,
                     msg_encoding,
                     attributes,
@@ -246,18 +240,18 @@ impl AsRef<[u8]> for Varsig {
 
 impl fmt::Debug for Varsig {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let (sigil, codec) = match self {
-            Varsig::Unknown { sigil, codec, .. } => (*sigil, *codec),
-            Varsig::EdDSA { sigil, .. } => (*sigil, Codec::Ed25519Pub),
+        let (version, codec) = match self {
+            Varsig::Unknown { version, codec, .. } => (*version, *codec),
+            Varsig::EdDSA { version, .. } => (*version, Codec::Ed25519Pub),
         };
-        write!(f, "{:?} - {:?}", sigil, codec)
+        write!(f, "{:?} v{} - {:?}", SIGIL, version, codec)
     }
 }
 
 /// Builder for Varsigs
 #[derive(Clone, Debug, Default)]
 pub struct Builder {
-    sigil: Codec,
+    version: u8,
     codec: Codec,
     msg_encoding: Codec,
     attributes: Vec<u64>,
@@ -269,7 +263,7 @@ impl Builder {
     /// create a new v1 varsig
     pub fn newv1(codec: Codec) -> Self {
         Self {
-            sigil: Codec::Varsigv1,
+            version: 1,
             codec,
             ..Default::default()
         }
@@ -278,7 +272,7 @@ impl Builder {
     /// create a new v1 varsig
     pub fn newv2(codec: Codec) -> Self {
         Self {
-            sigil: Codec::Varsigv2,
+            version: 2,
             codec,
             ..Default::default()
         }
@@ -288,7 +282,7 @@ impl Builder {
     pub fn new_from_ssh_signature(sig: &Signature) -> Result<Self, Error> {
         match sig.algorithm() {
             Algorithm::Ed25519 => Ok(Self {
-                sigil: Codec::Varsigv2,
+                version: 2,
                 codec: Codec::Ed25519Pub,
                 msg_encoding: Codec::Raw,
                 signature: sig.as_bytes().to_vec(),
@@ -332,12 +326,12 @@ impl Builder {
     pub fn build(&self) -> Varsig {
         match self.codec {
             Codec::Ed25519Pub => Varsig::EdDSA {
-                sigil: self.sigil,
+                version: self.version,
                 msg_encoding: self.msg_encoding,
                 signature: self.signature.clone(),
             },
             _ => Varsig::Unknown {
-                sigil: self.sigil,
+                version: self.version,
                 codec: self.codec,
                 msg_encoding: Some(self.msg_encoding),
                 attributes: self.attributes.clone(),
@@ -350,12 +344,12 @@ impl Builder {
     pub fn build_encoded(&self) -> EncodedVarsig {
         let vs = match self.codec {
             Codec::Ed25519Pub => Varsig::EdDSA {
-                sigil: self.sigil,
+                version: self.version,
                 msg_encoding: self.msg_encoding,
                 signature: self.signature.clone(),
             },
             _ => Varsig::Unknown {
-                sigil: self.sigil,
+                version: self.version,
                 codec: self.codec,
                 msg_encoding: Some(self.msg_encoding),
                 attributes: self.attributes.clone(),
